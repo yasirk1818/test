@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WhatsApp Web Chat</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; background-color: #f0f2f5; margin: 0; }
+        .container { text-align: center; background: white; padding: 20px 40px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1); max-width: 800px; }
+        h1 { color: #128C7E; }
+        #status-area { padding-bottom: 20px; border-bottom: 1px solid #ddd; margin-bottom: 20px; }
+        #qrcode { min-height: 260px; min-width: 260px; display: flex; justify-content: center; align-items: center; }
+        #status { font-size: 1.1em; color: #333; }
+        .loader { border: 8px solid #f3f3f3; border-radius: 50%; border-top: 8px solid #3498db; width: 50px; height: 50px; animation: spin 2s linear infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        
+        /* Chat Interface Styles */
+        #chat-interface { display: none; /* Initially hidden */ }
+        .chat-container { display: flex; gap: 20px; }
+        #chat-box { width: 50%; height: 400px; overflow-y: auto; border: 1px solid #ccc; padding: 10px; text-align: left; background: #e5ddd5; }
+        .message { padding: 8px; border-radius: 7px; margin-bottom: 10px; max-width: 80%; }
+        .received { background: #fff; float: left; clear: both; }
+        .sent { background: #dcf8c6; float: right; clear: both; }
+        .message .from { font-weight: bold; color: #075E54; display: block; font-size: 0.8em; }
+        #send-form { width: 50%; display: flex; flex-direction: column; gap: 10px; }
+        #send-form input, #send-form textarea { padding: 10px; border: 1px solid #ccc; border-radius: 5px; font-size: 1em; }
+        #send-form button { padding: 10px; background-color: #25D366; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 1em; }
+        #logs { margin-top: 10px; font-size: 0.9em; color: gray; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div id="status-area">
+            <h1>WhatsApp Web Chat</h1>
+            <div id="qrcode"><div class="loader"></div></div>
+            <div id="status">Please wait, initializing...</div>
+        </div>
+
+        <div id="chat-interface">
+            <h2>Live Chat</h2>
+            <div class="chat-container">
+                <!-- Message Sending Form -->
+                <form id="send-form">
+                    <h3>Send a Message</h3>
+                    <input type="text" id="number" placeholder="Recipient Number (e.g., 923001234567)" required>
+                    <textarea id="message" rows="5" placeholder="Type your message here..." required></textarea>
+                    <button type="submit">Send Message</button>
+                    <div id="logs"></div>
+                </form>
+                <!-- Incoming Messages Box -->
+                <div id="chat-box">
+                    <!-- Messages will appear here -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Socket.io client library -->
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        const socket = io();
+
+        const qrElement = document.getElementById('qrcode');
+        const statusElement = document.getElementById('status');
+        const chatInterface = document.getElementById('chat-interface');
+        const statusArea = document.getElementById('status-area');
+        
+        const sendForm = document.getElementById('send-form');
+        const numberInput = document.getElementById('number');
+        const messageInput = document.getElementById('message');
+        const chatBox = document.getElementById('chat-box');
+        const logs = document.getElementById('logs');
+
+        // Listen for QR code from server
+        socket.on('qr', (url) => {
+            if (url) {
+                qrElement.innerHTML = `<img src="${url}" alt="QR Code">`;
+            } else {
+                qrElement.innerHTML = '';
+            }
+        });
+
+        // Listen for status updates
+        socket.on('status', (message) => {
+            statusElement.textContent = message;
+            if (message.includes('Connected')) {
+                statusArea.style.display = 'none'; // Hide QR section
+                chatInterface.style.display = 'block'; // Show chat interface
+            }
+        });
+
+        // Listen for server logs/feedback
+        socket.on('log', (message) => {
+            logs.textContent = message;
+            setTimeout(() => { logs.textContent = ''; }, 3000); // Clear log after 3 seconds
+        });
+
+        // Listen for incoming messages
+        socket.on('message-received', (data) => {
+            const messageDiv = document.createElement('div');
+            messageDiv.classList.add('message', 'received');
+            messageDiv.innerHTML = `<span class="from">${data.from.replace('@c.us', '')}</span>${data.body}`;
+            chatBox.appendChild(messageDiv);
+            chatBox.scrollTop = chatBox.scrollHeight; // Auto-scroll
+        });
+
+        // Handle form submission to send a message
+        sendForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const number = numberInput.value.trim();
+            const message = messageInput.value.trim();
+
+            if (number && message) {
+                // Display sent message immediately in the chat box
+                const messageDiv = document.createElement('div');
+                messageDiv.classList.add('message', 'sent');
+                messageDiv.innerHTML = `<span class="from">You to ${number}</span>${message}`;
+                chatBox.appendChild(messageDiv);
+                chatBox.scrollTop = chatBox.scrollHeight;
+
+                // Send data to server
+                socket.emit('send-message', { number, message });
+                messageInput.value = ''; // Clear message input
+            }
+        });
+    </script>
+</body>
+</html>
